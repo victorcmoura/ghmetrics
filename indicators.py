@@ -104,6 +104,69 @@ def fetch_metrics(project_name, organization_name):
 
     return {'issues': all_issues[::-1], 'comments': all_comments[::-1]}
 
+def generate_reports(organization_name, project, base_dir, weeks, issues_per_week, comments_per_week, comment_avg_len_per_week, comments_len_per_week):
+
+    f = open(base_dir + '{}.txt'.format(project), 'w')
+
+    print('{0}/{1} Report'.format(organization_name, project), file=f)
+    print('-'*50, end='\n\n', file=f)
+    for i in range(len(weeks)):
+        print('Sprint %d: ' %(i), file=f)
+        print('\tIssues: %d' %(issues_per_week[i]), file=f)
+        print('\tComments: %d' %(comments_per_week[i]), file=f)
+        print('\tComment avg size: %d chars' %(comment_avg_len_per_week[i]), file=f)
+        print('\tTotal comment size: %d chars' %(comments_len_per_week[i]), file=f)
+    print('-'*50, end='\n\n', file=f)
+    print('Total issues: %d' %(sum(issues_per_week)), file=f)
+    print('Total comments: %d' %(sum(comments_per_week)), file=f)
+
+    f.close()
+
+    save_graph(
+        x_values=weeks,
+        x_label="Weeks",
+        y_values=issues_per_week,
+        y_label="Number of issues",
+        title="Issues open per week",
+        line_label="Number of issues",
+        line_color="b",
+        save_path=base_dir + '{}-issues_per_week.pdf'.format(project)
+    )
+
+    save_graph(
+        x_values=weeks,
+        x_label="Weeks",
+        y_values=comments_per_week,
+        y_label="Number of comments",
+        title="Comments made per week",
+        line_label="Number of comments",
+        line_color="r",
+        save_path=base_dir + '{}-comments_per_week.pdf'.format(project)
+    )
+
+    save_graph(
+        x_values=weeks,
+        x_label="Weeks",
+        y_values=comment_avg_len_per_week,
+        y_label="Average comment size",
+        title="Average comment size per week",
+        line_label="Total comments size",
+        line_color="g",
+        save_path=base_dir + '{}-comment_avg_len_per_week.pdf'.format(project)
+    )
+
+    save_graph(
+        x_values=weeks,
+        x_label="Weeks",
+        y_values=comments_len_per_week,
+        y_label="Total comments size",
+        title="Total comments size per week",
+        line_label="Total comments size",
+        line_color="k",
+        save_path=base_dir + '{}-total_commented_chars_per_week.pdf'.format(project)
+    )
+
+
 organizations = ['fga-eps-mds']
 
 for organization_name in organizations:
@@ -134,10 +197,6 @@ for organization_name in organizations:
         if not os.path.exists(base_dir + '{0}'.format(project)):
             os.makedirs(base_dir + '{0}'.format(project))
 
-        base_dir_proj = base_dir + project + '/'
-
-        f = open(base_dir_proj + '{}.txt'.format(project), 'w')
-
         for issue in issues:
             issues_per_week.append(len(issue))
 
@@ -148,60 +207,7 @@ for organization_name in organizations:
 
         weeks = np.linspace(1, len(issues), len(issues))
 
-        print('{0}/{1} Report'.format(organization_name, project), file=f)
-        print('-'*50, end='\n\n', file=f)
-        for i in range(len(weeks)):
-            print('Sprint %d: ' %(i), file=f)
-            print('\tIssues: %d' %(issues_per_week[i]), file=f)
-            print('\tComments: %d' %(comments_per_week[i]), file=f)
-            print('\tComment avg size: %d chars' %(comment_avg_len_per_week[i]), file=f)
-            print('\tTotal comment size: %d chars' %(comments_len_per_week[i]), file=f)
-        print('-'*50, end='\n\n', file=f)
-        print('Total issues: %d' %(sum(issues_per_week)), file=f)
-        print('Total comments: %d' %(sum(comments_per_week)), file=f)
+        base_dir_proj = base_dir + project + '/'
 
-        f.close()
-
-        save_graph(
-            x_values=weeks,
-            x_label="Weeks",
-            y_values=issues_per_week,
-            y_label="Number of issues",
-            title="Issues open per week",
-            line_label="Number of issues",
-            line_color="b",
-            save_path=base_dir_proj + '{}-issues_per_week.pdf'.format(project)
-        )
-
-        save_graph(
-            x_values=weeks,
-            x_label="Weeks",
-            y_values=comments_per_week,
-            y_label="Number of comments",
-            title="Comments made per week",
-            line_label="Number of comments",
-            line_color="r",
-            save_path=base_dir_proj + '{}-comments_per_week.pdf'.format(project)
-        )
-
-        save_graph(
-            x_values=weeks,
-            x_label="Weeks",
-            y_values=comment_avg_len_per_week,
-            y_label="Average comment size",
-            title="Average comment size per week",
-            line_label="Total comments size",
-            line_color="g",
-            save_path=base_dir_proj + '{}-comment_avg_len_per_week.pdf'.format(project)
-        )
-
-        save_graph(
-            x_values=weeks,
-            x_label="Weeks",
-            y_values=comments_len_per_week,
-            y_label="Total comments size",
-            title="Total comments size per week",
-            line_label="Total comments size",
-            line_color="k",
-            save_path=base_dir_proj + '{}-total_commented_chars_per_week.pdf'.format(project)
-        )
+        generate_reports(organization_name, project, base_dir_proj, weeks, issues_per_week, comments_per_week, comment_avg_len_per_week, comments_len_per_week)
+        
