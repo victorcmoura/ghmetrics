@@ -6,101 +6,122 @@ import matplotlib.pyplot as plt
 import numpy as np
 import os
 
-def get_all_repos_from_org(organizationName, startswith_text=''):
+token = os.environ.get('GITHUB_TOKEN', '')
+
+def save_graph(x_values, x_label, y_values, y_label, title, line_label, line_color, save_path):
+    plt.plot(x_values, y_values, line_color, label=line_label)
+    plt.title(title)
+    plt.xlabel(x_label)
+    plt.ylabel(y_label)
+    plt.legend()
+    plt.savefig(save_path, bbox_inches='tight')
+    plt.clf()
+
+def make_request(link, token=token):
+    r = requests.get(link, auth=('', token))
+    json_data = json.loads(r.text)
+    return json_data
+
+def github_issues_link(organization_name, project_name, page):
+    return 'https://api.github.com/repos/' + organization_name + '/' + project_name + '/issues?state=all&filter=all&per_page=100&page=' + str(page)
+
+def get_datetime_object(date_string):
+    return datetime.strptime(date_string, '%Y-%m-%dT%H:%M:%SZ')
+
+def get_week_number(datetime_object):
+    return datetime_object.isocalendar()[1]
+
+def get_all_repos_from_org(organization_name, startswith_text=''):
     should_look_for_more_projects = True
     page = 1
     project_list = []
 
     while(should_look_for_more_projects):
-        link = 'https://api.github.com/orgs/' + organizationName + '/repos?per_page=100&page=' + str(page)
+        link = 'https://api.github.com/orgs/' + organization_name + '/repos?per_page=100&page=' + str(page)
 
-        token = os.environ.get('GITHUB_TOKEN', '')
+        projects = make_request(link)
 
-        r = requests.get(link, auth=('', token))
-
-        json_data = json.loads(r.text)
-
-        for project in json_data:
+        for project in projects:
             if project['name'].startswith(startswith_text):
                 project_list.append(project['name'])
 
-        if(len(json_data) is 0):
+        if(len(projects) is 0):
             should_look_for_more_projects = False
         else:
             page+=1
 
     return project_list
 
-def getStats(projectName, organizationName):
+def fetch_metrics(project_name, organization_name):
 
-    should_look_for_more_projects = True
+    should_look_for_more_issues = True
     page = 1
-    all_data = [[]]
+    all_issues = [[]]
     all_comments = [{'total': 0, 'avg_len':0, 'total_len':0}]
-    all_data_index = 0
-    all_data_week = -1
+    index = 0
+    week_number = None
 
-    while(should_look_for_more_projects):
-        link = 'https://api.github.com/repos/' + organizationName + '/' + projectName + '/issues?state=all&filter=all&per_page=100&page=' + str(page)
+    while(should_look_for_more_issues):
+        link = github_issues_link(organization_name, project_name, page)
 
-        token = os.environ.get('GITHUB_TOKEN', '')
+        issues = make_request(link)
 
-        r = requests.get(link, auth=('', token))
+        for issue in issues:
+            comments = make_request(link=issue['comments_url'])
 
-        json_data = json.loads(r.text)
+            issue['created_at'] = get_datetime_object(issue['created_at'])
+            
+            if(week_number is None):
+                week_number = get_week_number(issue['created_at'])
 
-        for each in json_data:
-            c = requests.get(each['comments_url'], auth=('', token))
-            comments = json.loads(c.text)
-            each['created_at'] = datetime_object = datetime.strptime(each['created_at'], '%Y-%m-%dT%H:%M:%SZ')
-            if(all_data_week is -1):
-                all_data_week = each['created_at'].isocalendar()[1]
+            number_of_commented_chars = 0
 
-            total_len_all_comments = 0
             for comment in comments:
                 string = comment['body']
-                total_len_all_comments += len(string)
+                number_of_commented_chars += len(string)
 
-            if(each['created_at'].isocalendar()[1] is all_data_week):
-                all_data[all_data_index].append(each)
-                all_comments[all_data_index]['total'] += len(comments)
-                all_comments[all_data_index]['total_len'] += total_len_all_comments
-
+            if(get_week_number(issue['created_at']) is week_number):
+                all_issues[index].append(issue)
+                all_comments[index]['total'] += len(comments)
+                all_comments[index]['total_len'] += number_of_commented_chars
             else:
-                all_data_week = each['created_at'].isocalendar()[1]
+                week_number = get_week_number(issue['created_at'])
+                
                 try:
-                    all_comments[all_data_index]['avg_len'] = all_comments[all_data_index]['total_len']/all_comments[all_data_index]['total']
+                    all_comments[index]['avg_len'] = all_comments[index]['total_len']/all_comments[index]['total']
                 except ZeroDivisionError:
-                    all_comments[all_data_index]['avg_len'] = 0.0
-                all_data_index += 1
-                all_data.append([each])
-                all_comments.append({'total': len(comments), 'avg_len':0, 'total_len':total_len_all_comments})
+                    all_comments[index]['avg_len'] = 0.0
+                
+                index += 1
 
-        if(len(json_data) is 0):
-            should_look_for_more_projects = False
+                all_issues.append([issue])
+                all_comments.append({'total': len(comments), 'avg_len':0, 'total_len': number_of_commented_chars})
+
+        if(len(issues) is 0):
+            should_look_for_more_issues = False
         else:
             page+=1
 
-    return {'issues':all_data[::-1], 'comments':all_comments[::-1]}
+    return {'issues': all_issues[::-1], 'comments': all_comments[::-1]}
 
-organizations = ['fga-eps-mds', 'RolesFGA', 'integra-vendas', 'CarDefense', 'Kalkuli', 'BotLino', 'NaturalSearch', 'PDF2CASH']
+organizations = ['fga-eps-mds']
 
-for organizationName in organizations:
-    projects = get_all_repos_from_org(organizationName, startswith_text='2018.2')
+for organization_name in organizations:
+    projects = get_all_repos_from_org(organization_name, startswith_text='2018.2')
 
-    if not os.path.exists('{0}'.format(organizationName)):
-            os.makedirs('{0}'.format(organizationName))
+    if not os.path.exists('{0}'.format(organization_name)):
+            os.makedirs('{0}'.format(organization_name))
 
-    base_dir = '{0}/'.format(organizationName)
+    base_dir = '{0}/'.format(organization_name)
     
     for project in projects:
-        print('{0}/{1} Report'.format(organizationName, project))
+        print('{0}/{1} Report'.format(organization_name, project))
         print(strftime("%a, %d %b %Y %X", gmtime()))
         print('-'*50, end='\n\n')
 
-        result = getStats(project, organizationName)
+        result = fetch_metrics(project, organization_name)
 
-        all_data = result['issues']
+        issues = result['issues']
         comments = result['comments']
 
         week_index = 1
@@ -117,17 +138,17 @@ for organizationName in organizations:
 
         f = open(base_dir_proj + '{}.txt'.format(project), 'w')
 
-        for each in all_data:
-            issues_per_week.append(len(each))
+        for issue in issues:
+            issues_per_week.append(len(issue))
 
         for each in comments:
             comments_per_week.append(each['total'])
             comment_avg_len_per_week.append(each['avg_len'])
             comments_len_per_week.append(each['total_len'])
 
-        weeks = np.linspace(1, len(all_data), len(all_data))
+        weeks = np.linspace(1, len(issues), len(issues))
 
-        print('{0}/{1} Report'.format(organizationName, project), file=f)
+        print('{0}/{1} Report'.format(organization_name, project), file=f)
         print('-'*50, end='\n\n', file=f)
         for i in range(len(weeks)):
             print('Sprint %d: ' %(i), file=f)
@@ -141,38 +162,46 @@ for organizationName in organizations:
 
         f.close()
 
-        plt.plot(weeks, issues_per_week, 'b', label='Number of issues')
-        plt.title("Issues open per week")
-        plt.xlabel("Weeks")
-        plt.ylabel("Number of issues")
-        plt.legend()
-        # plt.show()
-        plt.savefig(base_dir_proj + '{}-issues_per_week.pdf'.format(project), bbox_inches='tight')
-        plt.clf()
+        save_graph(
+            x_values=weeks,
+            x_label="Weeks",
+            y_values=issues_per_week,
+            y_label="Number of issues",
+            title="Issues open per week",
+            line_label="Number of issues",
+            line_color="b",
+            save_path=base_dir_proj + '{}-issues_per_week.pdf'.format(project)
+        )
 
-        plt.plot(weeks, comments_per_week, 'r', label='Number of comments')
-        plt.title("Comments made per week")
-        plt.xlabel("Weeks")
-        plt.ylabel("Number of comments")
-        plt.legend()
-        # plt.show()
-        plt.savefig(base_dir_proj + '{}-comments_per_week.pdf'.format(project), bbox_inches='tight')
-        plt.clf()
+        save_graph(
+            x_values=weeks,
+            x_label="Weeks",
+            y_values=comments_per_week,
+            y_label="Number of comments",
+            title="Comments made per week",
+            line_label="Number of comments",
+            line_color="r",
+            save_path=base_dir_proj + '{}-comments_per_week.pdf'.format(project)
+        )
 
-        plt.plot(weeks, comment_avg_len_per_week, 'g', label='Comment avg size')
-        plt.title("Average comment size per week")
-        plt.xlabel("Weeks")
-        plt.ylabel("Average comment size")
-        plt.legend()
-        # plt.show()
-        plt.savefig(base_dir_proj + '{}-comment_avg_len_per_week.pdf'.format(project), bbox_inches='tight')
-        plt.clf()
+        save_graph(
+            x_values=weeks,
+            x_label="Weeks",
+            y_values=comment_avg_len_per_week,
+            y_label="Average comment size",
+            title="Average comment size per week",
+            line_label="Total comments size",
+            line_color="g",
+            save_path=base_dir_proj + '{}-comment_avg_len_per_week.pdf'.format(project)
+        )
 
-        plt.plot(weeks, comments_len_per_week, 'k', label='Total comments size')
-        plt.title("Total comments size per week")
-        plt.xlabel("Weeks")
-        plt.ylabel("Total comments size")
-        plt.legend()
-        # plt.show()
-        plt.savefig(base_dir_proj + '{}-total_commented_chars_per_week.pdf'.format(project), bbox_inches='tight')
-        plt.clf()
+        save_graph(
+            x_values=weeks,
+            x_label="Weeks",
+            y_values=comments_len_per_week,
+            y_label="Total comments size",
+            title="Total comments size per week",
+            line_label="Total comments size",
+            line_color="k",
+            save_path=base_dir_proj + '{}-total_commented_chars_per_week.pdf'.format(project)
+        )
