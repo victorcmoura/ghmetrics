@@ -25,9 +25,6 @@ def make_request(link, token=os.environ.get('GITHUB_TOKEN', '')):
     return json_data
 
 def save_graph(x_values, x_label, y_values, y_label, title, line_label, line_color, save_path):
-    print(y_values, type(y_values))
-    print(x_values, type(x_values))
-
     plt.plot(x_values, y_values, line_color, label=line_label)
     plt.title(title)
     plt.xlabel(x_label)
